@@ -1,0 +1,675 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>COVID Hospital Worker Risk Sandbox (Monte Carlo)</title>
+  <style>
+    :root { --bg:#0b0c10; --card:#141722; --muted:#aab1c7; --text:#eef1ff; --line:#2a2f45; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:18px 18px 10px; border-bottom:1px solid var(--line); }
+    header h1 { margin:0 0 6px; font-size:18px; font-weight:700; }
+    header p { margin:0; color:var(--muted); font-size:13px; line-height:1.4; max-width:980px; }
+    main { display:grid; grid-template-columns: 380px 1fr; gap:14px; padding:14px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .row + .row { margin-top:10px; }
+    label { font-size:13px; color:var(--muted); }
+    input[type="range"] { width: 190px; }
+    select, button { background:#0f1220; border:1px solid var(--line); color:var(--text); border-radius:10px; padding:9px 10px; }
+    button { cursor:pointer; font-weight:650; }
+    button:active { transform: translateY(1px); }
+    .small { font-size:12px; color:var(--muted); line-height:1.45; }
+    .kpis { display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px; }
+    .kpi { border:1px solid var(--line); border-radius:12px; padding:10px; background:#0f1220; }
+    .kpi .v { font-size:18px; font-weight:800; margin-top:6px; }
+    .kpi .t { font-size:12px; color:var(--muted); }
+    canvas { width:100%; height:360px; background:#0f1220; border:1px solid var(--line); border-radius:14px; display:block; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
+    .pill { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border-radius:999px; border:1px solid var(--line); background:#0f1220; font-size:12px; color:var(--muted); }
+    .warn { color:#ffd18a; }
+    .good { color:#9dffb0; }
+    .bad { color:#ff9da6; }
+    .list { margin:10px 0 0; padding-left:18px; color:var(--muted); font-size:13px; }
+    .list li { margin:6px 0; }
+    .footer-note { margin-top:10px; color:var(--muted); font-size:12px; line-height:1.45; }
+    @media (max-width: 980px){
+      main { grid-template-columns: 1fr; }
+      input[type="range"]{ width: 100%; }
+      .row{ align-items:flex-start; flex-direction:column; }
+      .row > div{ width:100%; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Hospital Worker Risk Sandbox (Monte Carlo) — Live</h1>
+    <p>
+      Drag sliders to update the histogram and KPIs <b>live</b>. This is a toy model (not clinical advice).
+      Use it to explore “what if” courses of action: better PPE/fit, reduced contact time, improved ventilation/controls, shorter shifts, redeployment, etc.
+    </p>
+  </header>
+
+  <main>
+    <section class="card" id="controlsCard">
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="simN"><b>Simulations</b> (live runs are throttled)</label>
+          <span class="pill" id="perfPill">Ready</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="simN">N</label>
+          <span id="simNVal" class="pill">20,000</span>
+        </div>
+        <input id="simN" type="range" min="2000" max="100000" step="1000" value="20000" />
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--line); margin:14px 0;">
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="surge">Local surge intensity</label>
+          <span id="surgeVal" class="pill">0.80</span>
+        </div>
+        <input id="surge" type="range" min="0" max="1" step="0.01" value="0.8" />
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="contactMin">Minutes of close contact / shift</label>
+          <span id="contactMinVal" class="pill">240</span>
+        </div>
+        <input id="contactMin" type="range" min="0" max="720" step="5" value="240" />
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="hours">Shift length (hours)</label>
+          <span id="hoursVal" class="pill">12.0</span>
+        </div>
+        <input id="hours" type="range" min="4" max="16" step="0.5" value="12" />
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="aerosol">Aerosol-generating procedures (AGPs)</label>
+          <span id="aerosolVal" class="pill">Often</span>
+        </div>
+        <select id="aerosol">
+          <option value="0">Rare/Never</option>
+          <option value="1" selected>Often</option>
+          <option value="2">Frequent/High</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="ppe">PPE level</label>
+          <span id="ppeVal" class="pill">Surgical</span>
+        </div>
+        <select id="ppe">
+          <option value="none">None</option>
+          <option value="cloth">Cloth</option>
+          <option value="surgical" selected>Surgical</option>
+          <option value="ffp2">FFP2 / N95</option>
+          <option value="ffp3">FFP3 / N99</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="fit">Fit testing quality</label>
+          <span id="fitVal" class="pill">0.40</span>
+        </div>
+        <input id="fit" type="range" min="0" max="1" step="0.01" value="0.4" />
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="donDoff">Don/doff + protocol adherence</label>
+          <span id="donDoffVal" class="pill">0.70</span>
+        </div>
+        <input id="donDoff" type="range" min="0" max="1" step="0.01" value="0.7" />
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="controls">Engineering/admin controls</label>
+          <span id="controlsVal" class="pill">Basic</span>
+        </div>
+        <select id="controls">
+          <option value="basic" selected>Basic</option>
+          <option value="enhanced">Enhanced (ventilation/cohorting)</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="vax">Vaccination / immunity strength</label>
+          <span id="vaxVal" class="pill">0.60</span>
+        </div>
+        <input id="vax" type="range" min="0" max="1" step="0.01" value="0.6" />
+      </div>
+
+      <div class="row">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <label for="highRisk">Worker vulnerability factor</label>
+          <span id="highRiskVal" class="pill">1.00×</span>
+        </div>
+        <input id="highRisk" type="range" min="0.7" max="2.0" step="0.01" value="1.0" />
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--line); margin:14px 0;">
+
+      <div class="row">
+        <button id="runBtn">Run now</button>
+        <button id="compareBtn" title="Save current parameters as a baseline, then change sliders and observe live Δ.">Save baseline</button>
+      </div>
+
+      <div class="footer-note">
+        <b>Live update:</b> slider changes are <b>debounced</b> (waits briefly after you stop dragging) and
+        <b>cancels</b> older runs. If you crank N very high, live updates will feel slower.
+      </div>
+    </section>
+
+    <section class="card">
+      <canvas id="hist" width="900" height="420" aria-label="Histogram"></canvas>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="t">Daily infection risk (mean)</div>
+          <div class="v" id="kpiDailyMean">—</div>
+          <div class="t" id="kpiDailyCI">—</div>
+        </div>
+        <div class="kpi">
+          <div class="t">Daily infection risk (median)</div>
+          <div class="v" id="kpiDailyMed">—</div>
+          <div class="t" id="kpiDailyP90">—</div>
+        </div>
+        <div class="kpi">
+          <div class="t">7-day infection risk (mean)</div>
+          <div class="v" id="kpiWeekMean">—</div>
+          <div class="t" id="kpiWeekCI">—</div>
+        </div>
+        <div class="kpi">
+          <div class="t">Severe outcome (mean)</div>
+          <div class="v" id="kpiSevMean">—</div>
+          <div class="t" id="kpiSevCI">—</div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card" style="padding:12px;">
+          <div class="row" style="margin:0 0 8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+              <b>Courses of action (heuristic)</b>
+              <span id="actionPill" class="pill">—</span>
+            </div>
+          </div>
+          <ul class="list" id="actionList"></ul>
+          <div class="small">
+            Suggestions are generated from your current settings.
+          </div>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <div class="row" style="margin:0 0 8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+              <b>Baseline comparison</b>
+              <span id="basePill" class="pill">None saved</span>
+            </div>
+          </div>
+          <div class="small" id="baselineText">
+            Save a baseline, then drag sliders to see overlay + Δ.
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // -----------------------------
+    // Utilities
+    // -----------------------------
+    const $ = (id) => document.getElementById(id);
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    const fmtPct = (x) => (100 * x).toFixed(2) + "%";
+    const fmtSmallPct = (x) => (100 * x).toFixed(3) + "%";
+    const quantile = (arr, q) => {
+      const a = arr.slice().sort((x,y)=>x-y);
+      const pos = (a.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      return (a[base+1] !== undefined) ? a[base] + rest * (a[base+1]-a[base]) : a[base];
+    };
+    const mean = (arr) => arr.reduce((s,x)=>s+x,0)/arr.length;
+
+    // Normal-ish noise via Box–Muller
+    function randn() {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+    function jitter(x, sd) { return x + sd * randn(); }
+
+    // -----------------------------
+    // Toy risk model pieces
+    // -----------------------------
+    function ppeBaseEffect(ppe) {
+      switch (ppe) {
+        case "none": return 0.00;
+        case "cloth": return 0.20;
+        case "surgical": return 0.45;
+        case "ffp2": return 0.80;
+        case "ffp3": return 0.90;
+        default: return 0.45;
+      }
+    }
+    function aerosolMultiplier(level) { return level === 0 ? 1.0 : (level === 1 ? 1.8 : 2.6); }
+    function controlsMultiplier(ctrl) { return ctrl === "enhanced" ? 0.65 : 1.0; }
+    function fatigueMultiplier(hours) { return 1.0 + 0.03 * (hours - 8); }
+    function contactMultiplier(minutes) { return Math.pow(1 + Math.max(0, minutes)/60, 0.85); }
+    function surgeMultiplier(surge01) { return 0.6 + 2.0 * Math.pow(clamp01(surge01), 1.3); }
+
+    function infectionProbOneDay(params) {
+      const baseHazard = 0.0012; // toy
+      const sM = surgeMultiplier(jitter(params.surge, 0.06));
+      const cM = contactMultiplier(jitter(params.contactMin, 18));
+      const hM = fatigueMultiplier(jitter(params.hours, 0.6));
+      const aM = aerosolMultiplier(params.aerosolLevel);
+      const ctrlM = controlsMultiplier(params.controls);
+
+      const ppeEff = clamp01(jitter(ppeBaseEffect(params.ppe), 0.05));
+      const fitQ = clamp01(jitter(params.fit, 0.12));
+      const adhQ = clamp01(jitter(params.donDoff, 0.10));
+
+      const fitWeight = (params.ppe === "ffp2" || params.ppe === "ffp3") ? 0.65 : 0.25;
+      const effProtection = clamp01(ppeEff * (fitWeight*fitQ + (1-fitWeight)) * (0.55 + 0.45*adhQ));
+
+      const residual = 1 - effProtection;
+      const breach = clamp01(jitter(0.10 + 0.15*(1-params.donDoff), 0.08));
+      const breachM = 1 + 2.2 * breach;
+
+      const vuln = jitter(params.highRiskFactor, 0.06);
+      const hazard = baseHazard * sM * cM * hM * aM * ctrlM * residual * breachM * (0.85 + 0.15*vuln);
+      return clamp01(1 - Math.exp(-Math.max(0, hazard)));
+    }
+
+    function severeProbGivenInfection(params) {
+      const v = clamp01(jitter(params.vax, 0.10));
+      const vuln = Math.max(0.7, jitter(params.highRiskFactor, 0.10));
+      const base = 0.010 * Math.pow(vuln, 1.2);
+      return clamp01(base * (1 - 0.78 * v));
+    }
+
+    // -----------------------------
+    // Histogram drawing
+    // -----------------------------
+    function drawHistogram(canvas, samples, baselineSamples=null) {
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const m = {l:60, r:18, t:14, b:46};
+      const plotW = W - m.l - m.r;
+      const plotH = H - m.t - m.b;
+
+      ctx.strokeStyle = "#2a2f45";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(m.l, m.t, plotW, plotH);
+
+      const minX = 0;
+      const maxX = Math.max(
+        quantile(samples, 0.995),
+        baselineSamples ? quantile(baselineSamples, 0.995) : 0
+      );
+      const maxXClamped = Math.max(0.002, Math.min(0.25, maxX * 1.1));
+      const bins = 36;
+      const counts = new Array(bins).fill(0);
+      const baseCounts = baselineSamples ? new Array(bins).fill(0) : null;
+
+      const toBin = (x) => {
+        const t = (x - minX) / (maxXClamped - minX);
+        return Math.max(0, Math.min(bins-1, Math.floor(t * bins)));
+      };
+
+      samples.forEach(x => counts[toBin(x)]++);
+      if (baselineSamples) baselineSamples.forEach(x => baseCounts[toBin(x)]++);
+
+      const maxC = Math.max(...counts, ...(baseCounts ? baseCounts : [0]));
+      const barW = plotW / bins;
+
+      for (let i=0; i<bins; i++){
+        const h = (counts[i]/maxC) * plotH;
+        const x = m.l + i*barW;
+        const y = m.t + (plotH - h);
+        ctx.fillStyle = "rgba(157,255,176,0.65)";
+        ctx.fillRect(x+1, y, barW-2, h);
+      }
+
+      if (baselineSamples){
+        for (let i=0; i<bins; i++){
+          const h = (baseCounts[i]/maxC) * plotH;
+          const x = m.l + i*barW;
+          const y = m.t + (plotH - h);
+          ctx.fillStyle = "rgba(255,209,138,0.55)";
+          ctx.fillRect(x+1, y, barW-2, h);
+        }
+      }
+
+      ctx.fillStyle = "#aab1c7";
+      ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const ticks = 5;
+      for (let i=0; i<=ticks; i++){
+        const t = i/ticks;
+        const x = m.l + t*plotW;
+        const val = minX + t*(maxXClamped - minX);
+        ctx.strokeStyle = "#2a2f45";
+        ctx.beginPath();
+        ctx.moveTo(x, m.t + plotH);
+        ctx.lineTo(x, m.t + plotH + 6);
+        ctx.stroke();
+        ctx.fillText((100*val).toFixed(3) + "%", x, m.t + plotH + 10);
+      }
+
+      ctx.save();
+      ctx.translate(18, m.t + plotH/2);
+      ctx.rotate(-Math.PI/2);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("Relative frequency", 0, 0);
+      ctx.restore();
+
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = "#eef1ff";
+      ctx.font = "13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.fillText(
+        baselineSamples
+          ? "Daily infection probability distribution (green=current, amber=baseline)"
+          : "Daily infection probability distribution",
+        m.l, 6
+      );
+    }
+
+    // -----------------------------
+    // Heuristic action suggestions
+    // -----------------------------
+    function buildActions(params, dailyMean) {
+      const actions = [];
+      const ppe = params.ppe;
+      const highSurge = params.surge >= 0.7;
+      const highAGP = params.aerosolLevel >= 1;
+      const longHours = params.hours >= 12;
+      const lowFit = params.fit < 0.6 && (ppe === "ffp2" || ppe === "ffp3");
+      const lowAdh = params.donDoff < 0.65;
+      const weakCtrl = params.controls === "basic";
+      const heavyContact = params.contactMin >= 240;
+
+      if (highSurge && highAGP && (ppe === "none" || ppe === "cloth" || ppe === "surgical")) {
+        actions.push("Prioritize access to a respirator (FFP2/N95+) for AGP/high-surge work; if unavailable, consider redeployment away from AGPs.");
+      }
+      if ((ppe === "ffp2" || ppe === "ffp3") && lowFit) {
+        actions.push("Improve respirator fit (fit testing / seal checks); fit is a major determinant of respirator performance.");
+      }
+      if (lowAdh) actions.push("Increase don/doff and protocol adherence (buddy checks, refreshers, reduce rushed transitions).");
+      if (weakCtrl && (highSurge || highAGP)) actions.push("Strengthen engineering/admin controls: ventilation/filtration, cohorting, patient flow, minimizing room entries.");
+      if (heavyContact) actions.push("Reduce cumulative close-contact time: bundle care, remote monitoring where possible, rotate tasks.");
+      if (longHours) actions.push("Mitigate fatigue: shorten shifts/ensure breaks; fatigue raises error and exposure risk.");
+      if (params.vax < 0.5) actions.push("Boost immunity protection where appropriate (vaccination/boosters per local guidance); primarily reduces severe outcomes.");
+      if (params.highRiskFactor >= 1.3 && dailyMean > 0.01) actions.push("If personal vulnerability is high and risk remains elevated, escalate for accommodations/redeployment to lower-exposure roles.");
+
+      if (actions.length === 0) actions.push("Maintain current protections; explore marginal gains (fit checks, reduce contact time, enhance ventilation, consistent protocol adherence).");
+
+      let status = { text: "Moderate", cls: "warn" };
+      if (dailyMean < 0.003) status = { text: "Lower", cls: "good" };
+      else if (dailyMean > 0.015) status = { text: "Higher", cls: "bad" };
+
+      return { actions, status };
+    }
+
+    // -----------------------------
+    // UI bindings
+    // -----------------------------
+    const inputs = {
+      simN: $("simN"),
+      surge: $("surge"),
+      contactMin: $("contactMin"),
+      hours: $("hours"),
+      aerosol: $("aerosol"),
+      ppe: $("ppe"),
+      fit: $("fit"),
+      donDoff: $("donDoff"),
+      controls: $("controls"),
+      vax: $("vax"),
+      highRisk: $("highRisk"),
+    };
+
+    function readParams() {
+      return {
+        simN: parseInt(inputs.simN.value, 10),
+        surge: parseFloat(inputs.surge.value),
+        contactMin: parseFloat(inputs.contactMin.value),
+        hours: parseFloat(inputs.hours.value),
+        aerosolLevel: parseInt(inputs.aerosol.value, 10),
+        ppe: inputs.ppe.value,
+        fit: parseFloat(inputs.fit.value),
+        donDoff: parseFloat(inputs.donDoff.value),
+        controls: inputs.controls.value,
+        vax: parseFloat(inputs.vax.value),
+        highRiskFactor: parseFloat(inputs.highRisk.value),
+      };
+    }
+
+    function updateLabels() {
+      $("simNVal").textContent = (+inputs.simN.value).toLocaleString();
+      $("surgeVal").textContent = (+inputs.surge.value).toFixed(2);
+      $("contactMinVal").textContent = (+inputs.contactMin.value).toFixed(0);
+      $("hoursVal").textContent = (+inputs.hours.value).toFixed(1);
+
+      const a = parseInt(inputs.aerosol.value, 10);
+      $("aerosolVal").textContent = (a===0 ? "Rare/Never" : (a===1 ? "Often" : "Frequent/High"));
+
+      const p = inputs.ppe.value;
+      $("ppeVal").textContent =
+        p==="none" ? "None" :
+        p==="cloth" ? "Cloth" :
+        p==="surgical" ? "Surgical" :
+        p==="ffp2" ? "FFP2 / N95" : "FFP3 / N99";
+
+      $("fitVal").textContent = (+inputs.fit.value).toFixed(2);
+      $("donDoffVal").textContent = (+inputs.donDoff.value).toFixed(2);
+      $("controlsVal").textContent = inputs.controls.value === "enhanced" ? "Enhanced" : "Basic";
+      $("vaxVal").textContent = (+inputs.vax.value).toFixed(2);
+      $("highRiskVal").textContent = (+inputs.highRisk.value).toFixed(2) + "×";
+    }
+
+    // -----------------------------
+    // Live simulation scheduling (debounce + cancel)
+    // -----------------------------
+    let baseline = null; // {params, samples, summary}
+    let debounceTimer = null;
+    let runningToken = 0; // increment to cancel older runs
+
+    function setPerf(text, cls=null) {
+      const pill = $("perfPill");
+      pill.textContent = text;
+      pill.classList.remove("warn","good","bad");
+      if (cls) pill.classList.add(cls);
+    }
+
+    function summarize(samples, params) {
+      const m = mean(samples);
+      const med = quantile(samples, 0.5);
+      const lo = quantile(samples, 0.1);
+      const hi = quantile(samples, 0.9);
+
+      const weekSamples = samples.map(p => 1 - Math.pow(1 - p, 7));
+      const weekMean = mean(weekSamples);
+      const weekLo = quantile(weekSamples, 0.1);
+      const weekHi = quantile(weekSamples, 0.9);
+
+      const sevCond = severeProbGivenInfection(params);
+      const sevSamples = samples.map(p => p * sevCond);
+      const sevMean = mean(sevSamples);
+      const sevLo = quantile(sevSamples, 0.1);
+      const sevHi = quantile(sevSamples, 0.9);
+
+      return {
+        dailyMean: m, dailyMed: med, dailyP10: lo, dailyP90: hi,
+        weekMean, weekP10: weekLo, weekP90: weekHi,
+        sevMean, sevP10: sevLo, sevP90: sevHi
+      };
+    }
+
+    function updateKPIs(sum) {
+      $("kpiDailyMean").textContent = fmtPct(sum.dailyMean);
+      $("kpiDailyCI").textContent = `P10–P90: ${fmtPct(sum.dailyP10)} – ${fmtPct(sum.dailyP90)}`;
+      $("kpiDailyMed").textContent = fmtPct(sum.dailyMed);
+      $("kpiDailyP90").textContent = `P90: ${fmtPct(sum.dailyP90)}`;
+      $("kpiWeekMean").textContent = fmtPct(sum.weekMean);
+      $("kpiWeekCI").textContent = `P10–P90: ${fmtPct(sum.weekP10)} – ${fmtPct(sum.weekP90)}`;
+      $("kpiSevMean").textContent = fmtSmallPct(sum.sevMean);
+      $("kpiSevCI").textContent = `P10–P90: ${fmtSmallPct(sum.sevP10)} – ${fmtSmallPct(sum.sevP90)}`;
+    }
+
+    function updateActions(params, dailyMean) {
+      const {actions, status} = buildActions(params, dailyMean);
+      const list = $("actionList");
+      list.innerHTML = "";
+      actions.forEach(a => {
+        const li = document.createElement("li");
+        li.textContent = a;
+        list.appendChild(li);
+      });
+      const pill = $("actionPill");
+      pill.textContent = `Risk: ${status.text}`;
+      pill.classList.remove("warn","good","bad");
+      pill.classList.add(status.cls);
+    }
+
+    function updateBaselinePanel(currentSummary) {
+      const basePill = $("basePill");
+      const baselineText = $("baselineText");
+
+      if (!baseline) {
+        basePill.textContent = "None saved";
+        baselineText.textContent = "Save a baseline, then drag sliders to see overlay + Δ.";
+        return;
+      }
+
+      basePill.textContent = "Baseline saved";
+      const dDaily = currentSummary.dailyMean - baseline.summary.dailyMean;
+      const dWeek  = currentSummary.weekMean - baseline.summary.weekMean;
+      const dSev   = currentSummary.sevMean - baseline.summary.sevMean;
+
+      const arrow = (x) => x > 0 ? "↑" : (x < 0 ? "↓" : "→");
+      const signPct = (x) => (x>=0 ? "+" : "") + (100*x).toFixed(2) + "%";
+      const signSmallPct = (x) => (x>=0 ? "+" : "") + (100*x).toFixed(3) + "%";
+
+      baselineText.innerHTML = `
+        <div class="small">
+          <div>Δ Daily mean: <b>${arrow(dDaily)} ${signPct(dDaily)}</b></div>
+          <div>Δ 7-day mean: <b>${arrow(dWeek)} ${signPct(dWeek)}</b></div>
+          <div>Δ Severe mean: <b>${arrow(dSev)} ${signSmallPct(dSev)}</b></div>
+          <div style="margin-top:8px; color: var(--muted);">Green = current. Amber = baseline.</div>
+        </div>
+      `;
+    }
+
+    async function runSimulation({silent=false} = {}) {
+      const token = ++runningToken;
+      const params = readParams();
+
+      if (!silent) setPerf("Running…", "warn");
+
+      const N = params.simN;
+      const samples = new Array(N);
+
+      // chunk size: smaller gives smoother UI but slower
+      const chunk = 3000;
+      const t0 = performance.now();
+
+      for (let i=0; i<N; i++){
+        // cancel old runs
+        if (token !== runningToken) return null;
+
+        samples[i] = infectionProbOneDay(params);
+
+        if (i % chunk === 0) {
+          // yield to browser
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      if (token !== runningToken) return null;
+
+      const t1 = performance.now();
+      const ms = Math.round(t1 - t0);
+      const rate = Math.round(N / Math.max(1, ms) * 1000);
+
+      const summary = summarize(samples, params);
+      updateKPIs(summary);
+      updateActions(params, summary.dailyMean);
+      drawHistogram($("hist"), samples, baseline ? baseline.samples : null);
+      updateBaselinePanel(summary);
+
+      const cls = summary.dailyMean < 0.003 ? "good" : (summary.dailyMean > 0.015 ? "bad" : "warn");
+      setPerf(`Done (${ms} ms, ~${rate.toLocaleString()}/s)`, cls);
+
+      if (params.highRiskFactor >= 1.3 && summary.weekMean > 0.05) setPerf("Done (flag: high exposure × vulnerability)", "bad");
+
+      return { params, samples, summary };
+    }
+
+    function scheduleLiveRun() {
+      // Debounce: wait until the user pauses dragging
+      if (debounceTimer) clearTimeout(debounceTimer);
+
+      // Mark that something changed; cancels any ongoing run ASAP
+      runningToken++;
+
+      setPerf("Updating…", "warn");
+      debounceTimer = setTimeout(() => {
+        // Kick run on next frame for snappier UI after drag ends
+        requestAnimationFrame(() => runSimulation({silent:true}));
+      }, 160); // adjust: lower = more “live”, higher = smoother
+    }
+
+    // Hook up controls for live updates
+    Object.values(inputs).forEach(el => {
+      el.addEventListener("input", () => { updateLabels(); scheduleLiveRun(); });
+      el.addEventListener("change", () => { updateLabels(); scheduleLiveRun(); });
+    });
+
+    $("runBtn").addEventListener("click", async () => {
+      await runSimulation();
+    });
+
+    $("compareBtn").addEventListener("click", async () => {
+      const result = await runSimulation();
+      if (!result) return;
+      baseline = { params: result.params, samples: result.samples, summary: result.summary };
+      $("basePill").textContent = "Baseline saved";
+      $("basePill").classList.remove("warn","good","bad");
+      $("basePill").classList.add("warn");
+      updateBaselinePanel(result.summary);
+      // overlay will update automatically on next live run; draw now too:
+      drawHistogram($("hist"), result.samples, baseline.samples);
+    });
+
+    // initial
+    updateLabels();
+    window.addEventListener("load", async () => {
+      await runSimulation({silent:true});
+    });
+  </script>
+</body>
+</html>
