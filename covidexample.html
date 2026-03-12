@@ -1,0 +1,1047 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>COVID-19 Workplace Risk Explorer (Monte Carlo)</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#111a33;
+      --panel2:#0f1730;
+      --text:#e8eefc;
+      --muted:#a7b3d6;
+      --accent:#7aa2ff;
+      --good:#4ade80;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      --line:rgba(255,255,255,.08);
+      --shadow: 0 14px 40px rgba(0,0,0,.35);
+      --radius:16px;
+      font-synthesis-weight: none;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background: radial-gradient(1000px 600px at 15% 10%, rgba(122,162,255,.25), transparent 60%),
+                  radial-gradient(900px 500px at 80% 20%, rgba(251,113,133,.15), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+      font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    header{
+      padding:24px 18px 10px;
+      max-width:1200px;
+      margin:0 auto;
+    }
+    h1{
+      margin:0 0 6px;
+      font-size:20px;
+      letter-spacing:.2px;
+    }
+    .sub{
+      color:var(--muted);
+      margin:0;
+      max-width:80ch;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: 420px 1fr;
+      gap:16px;
+      padding:16px 18px 24px;
+      max-width:1200px;
+      margin:0 auto;
+    }
+    @media (max-width: 980px){
+      .grid{grid-template-columns:1fr}
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 60%),
+                  rgba(17,26,51,.92);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card h2{
+      margin:0;
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:rgba(232,238,252,.85);
+    }
+    .card .head{
+      padding:14px 14px 10px;
+      background: rgba(15,23,48,.55);
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .pill{
+      font-size:12px;
+      color:rgba(232,238,252,.85);
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.05);
+      padding:6px 10px;
+      border-radius:999px;
+      display:flex;
+      gap:6px;
+      align-items:center;
+      white-space:nowrap;
+    }
+    .body{
+      padding:14px;
+    }
+    .section{
+      margin-bottom:14px;
+      padding-bottom:14px;
+      border-bottom:1px solid var(--line);
+    }
+    .section:last-child{border-bottom:none; padding-bottom:0; margin-bottom:0;}
+    .section-title{
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      margin-bottom:10px;
+      gap:10px;
+    }
+    .section-title span{
+      color:rgba(232,238,252,.9);
+      font-weight:600;
+      font-size:13px;
+    }
+    .tiny{
+      color:var(--muted);
+      font-size:12px;
+    }
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 90px;
+      gap:10px;
+      align-items:center;
+      margin:10px 0;
+    }
+    .row label{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      color:rgba(232,238,252,.92);
+    }
+    .row label .hint{
+      color:var(--muted);
+      font-size:12px;
+    }
+    input[type="range"]{
+      width:100%;
+      accent-color: var(--accent);
+    }
+    .val{
+      text-align:right;
+      font-variant-numeric: tabular-nums;
+      color:rgba(232,238,252,.9);
+      background: rgba(255,255,255,.05);
+      border:1px solid var(--line);
+      padding:6px 8px;
+      border-radius:10px;
+    }
+    .btnbar{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    button{
+      cursor:pointer;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      font-weight:600;
+    }
+    button:hover{background: rgba(255,255,255,.09);}
+    button:active{transform: translateY(1px);}
+    .danger{border-color: rgba(251,113,133,.4);}
+    .accent{border-color: rgba(122,162,255,.45);}
+    .kpi{
+      display:grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap:10px;
+      margin-bottom:12px;
+    }
+    @media (max-width: 980px){
+      .kpi{grid-template-columns: repeat(2, minmax(160px, 1fr));}
+    }
+    .k{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      background: rgba(255,255,255,.04);
+    }
+    .k .t{
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:6px;
+    }
+    .k .n{
+      font-size:18px;
+      font-weight:800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing:.2px;
+    }
+    .k .b{
+      margin-top:4px;
+      font-size:12px;
+      color:rgba(232,238,252,.85);
+      font-variant-numeric: tabular-nums;
+    }
+    .bar{
+      height:10px;
+      border-radius:999px;
+      background: rgba(255,255,255,.08);
+      overflow:hidden;
+      margin-top:10px;
+    }
+    .bar > div{
+      height:100%;
+      width:0%;
+      background: linear-gradient(90deg, var(--good), var(--warn), var(--bad));
+    }
+    canvas{
+      width:100%;
+      height:300px;
+      display:block;
+      background: rgba(255,255,255,.03);
+      border:1px solid var(--line);
+      border-radius:14px;
+    }
+    .footer-note{
+      margin-top:10px;
+      color:var(--muted);
+      font-size:12px;
+      max-width:95ch;
+    }
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>COVID-19 Workplace Risk Explorer (Monte Carlo)</h1>
+  <p class="sub">
+    Slide parameters to explore how sector/job activities can change exposure and morbidity outcomes.
+    This is an educational “what-if” simulator; results depend strongly on assumptions and should not be used as medical guidance.
+  </p>
+</header>
+
+<div class="grid">
+  <!-- CONTROLS -->
+  <div class="card">
+    <div class="head">
+      <h2>Parameters</h2>
+      <div class="pill" id="simStatus">Sim: <span class="mono" id="simInfo">idle</span></div>
+    </div>
+    <div class="body">
+
+      <div class="section">
+        <div class="section-title">
+          <span>Community & workplace context</span>
+          <span class="tiny">baseline probability of encountering infectious people</span>
+        </div>
+
+        <div class="row">
+          <label>
+            Community prevalence (infectious %)
+            <span class="hint">Estimated % of people currently infectious in the relevant catchment area.</span>
+            <input id="prevalence" type="range" min="0.05" max="10" step="0.05" value="1.0">
+          </label>
+          <div class="val" id="prevalence_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Workforce size for outcome projections
+            <span class="hint">Used for counts (cases/hospitalizations/deaths) across a workforce for one “shift.”</span>
+            <input id="popSize" type="range" min="10" max="5000" step="10" value="500">
+          </label>
+          <div class="val" id="popSize_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Shift length (hours)
+            <span class="hint">Longer time generally increases cumulative exposure.</span>
+            <input id="shiftHours" type="range" min="1" max="12" step="0.5" value="8">
+          </label>
+          <div class="val" id="shiftHours_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Close contacts per hour
+            <span class="hint">Meaningful interactions where transmission could occur.</span>
+            <input id="contactsPerHour" type="range" min="0" max="30" step="0.5" value="4">
+          </label>
+          <div class="val" id="contactsPerHour_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Sector risk multiplier
+            <span class="hint">Captures sector-specific factors (e.g., healthcare vs. remote work). 1 = average.</span>
+            <input id="sectorMult" type="range" min="0.2" max="3.0" step="0.05" value="1.15">
+          </label>
+          <div class="val" id="sectorMult_v"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span>Job activity & environment</span>
+          <span class="tiny">conditions that amplify or reduce transmission</span>
+        </div>
+
+        <div class="row">
+          <label>
+            Proximity intensity
+            <span class="hint">0 = mostly distanced; 1 = very close / face-to-face.</span>
+            <input id="proximity" type="range" min="0" max="1" step="0.01" value="0.55">
+          </label>
+          <div class="val" id="proximity_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Indoor fraction
+            <span class="hint">0 = outdoors; 1 = fully indoors.</span>
+            <input id="indoorFrac" type="range" min="0" max="1" step="0.01" value="0.85">
+          </label>
+          <div class="val" id="indoorFrac_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Ventilation quality
+            <span class="hint">0 = poor; 1 = excellent (e.g., high air changes, filtration).</span>
+            <input id="ventilation" type="range" min="0" max="1" step="0.01" value="0.45">
+          </label>
+          <div class="val" id="ventilation_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Crowding / density
+            <span class="hint">0 = sparse; 1 = crowded (more bystanders & shared air).</span>
+            <input id="crowding" type="range" min="0" max="1" step="0.01" value="0.50">
+          </label>
+          <div class="val" id="crowding_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Talking / vocalization
+            <span class="hint">0 = quiet; 1 = loud talking/singing/shouting (more aerosols).</span>
+            <input id="talking" type="range" min="0" max="1" step="0.01" value="0.55">
+          </label>
+          <div class="val" id="talking_v"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span>Protection & health</span>
+          <span class="tiny">reduces infection or severity</span>
+        </div>
+
+        <div class="row">
+          <label>
+            Mask/respirator effectiveness
+            <span class="hint">0 = none; 1 = high effectiveness with good fit & consistent use.</span>
+            <input id="maskEff" type="range" min="0" max="0.95" step="0.01" value="0.35">
+          </label>
+          <div class="val" id="maskEff_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Vaccination/immune protection (infection)
+            <span class="hint">Reduces infection probability given exposure (not perfect; varies by era/variant).</span>
+            <input id="vaxInf" type="range" min="0" max="0.85" step="0.01" value="0.25">
+          </label>
+          <div class="val" id="vaxInf_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Vaccination/immune protection (severe outcomes)
+            <span class="hint">Reduces hospitalization/death probabilities conditional on infection.</span>
+            <input id="vaxSev" type="range" min="0" max="0.95" step="0.01" value="0.55">
+          </label>
+          <div class="val" id="vaxSev_v"></div>
+        </div>
+
+        <div class="row">
+          <label>
+            Vulnerability index (age/comorbidity)
+            <span class="hint">0 = low vulnerability; 1 = high vulnerability. Affects severity outcomes.</span>
+            <input id="vuln" type="range" min="0" max="1" step="0.01" value="0.35">
+          </label>
+          <div class="val" id="vuln_v"></div>
+        </div>
+      </div>
+
+      <div class="btnbar">
+        <button class="accent" id="btnPresetOffice">Preset: Office/Hybrid</button>
+        <button class="accent" id="btnPresetRetail">Preset: Retail/Hospitality</button>
+        <button class="accent" id="btnPresetHealthcare">Preset: Healthcare</button>
+        <button class="danger" id="btnReset">Reset</button>
+      </div>
+
+      <div class="footer-note">
+        Tip: The model uses a simple exposure→infection mapping with uncertainty injected via random draws.
+        Edit the <span class="mono">Model assumptions</span> section in JS to calibrate to your preferred literature.
+      </div>
+    </div>
+  </div>
+
+  <!-- OUTPUTS -->
+  <div class="card">
+    <div class="head">
+      <h2>Simulation outputs</h2>
+      <div class="pill">Trials: <span class="mono" id="trialCount">0</span></div>
+    </div>
+    <div class="body">
+
+      <div class="kpi">
+        <div class="k">
+          <div class="t">Infection risk per shift (median)</div>
+          <div class="n" id="k_infrisk">—</div>
+          <div class="b" id="k_infrisk_ci">—</div>
+          <div class="bar"><div id="riskBar"></div></div>
+        </div>
+        <div class="k">
+          <div class="t">Expected infections (mean, workforce)</div>
+          <div class="n" id="k_infcount">—</div>
+          <div class="b" id="k_infcount_ci">—</div>
+        </div>
+        <div class="k">
+          <div class="t">Expected hospitalizations (mean)</div>
+          <div class="n" id="k_hosp">—</div>
+          <div class="b" id="k_hosp_ci">—</div>
+        </div>
+        <div class="k">
+          <div class="t">Expected deaths (mean)</div>
+          <div class="n" id="k_death">—</div>
+          <div class="b" id="k_death_ci">—</div>
+        </div>
+      </div>
+
+      <canvas id="hist"></canvas>
+      <div class="footer-note" id="chartNote"></div>
+
+      <div class="section" style="margin-top:14px;">
+        <div class="section-title">
+          <span>Distribution selector</span>
+          <span class="tiny">histogram shows outcomes across Monte Carlo runs</span>
+        </div>
+        <div class="btnbar">
+          <button id="showInfections">Histogram: infections</button>
+          <button id="showSymptomatic">Histogram: symptomatic</button>
+          <button id="showHosp">Histogram: hospitalizations</button>
+          <button id="showDeaths">Histogram: deaths</button>
+          <button id="showLong">Histogram: long-COVID</button>
+        </div>
+        <div class="footer-note">
+          “Long-COVID” here is a simple assumed probability conditional on symptomatic infection; adjust in code for your definition.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------------------------
+  // Model assumptions (EDITABLE)
+  // ---------------------------
+  // These are deliberately simple. You can calibrate them to match a specific publication or dataset.
+
+  // Base per-contact transmission scale (before modifiers). Think of this as “typical close contact”
+  // with some minutes of interaction in mixed indoor settings.
+  const BASE_P_CONTACT = 0.012; // 1.2% per close contact (pre-mitigation), rough illustrative
+
+  // Severity baselines (conditional on infection) for an "average" adult population:
+  const BASE_SYMPTOMATIC = 0.55;    // fraction of infections that become symptomatic
+  const BASE_HOSP = 0.012;          // fraction of infections hospitalized
+  const BASE_IFR = 0.0025;          // fraction of infections resulting in death (infection fatality ratio)
+  const BASE_LONGCOVID = 0.08;      // fraction of symptomatic infections with long-COVID (illustrative)
+
+  // How vulnerability index (0..1) increases severity (multipliers)
+  const VULN_HOSP_MULT = 3.0; // at vuln=1 => hosp multiplier 1+3=4x
+  const VULN_IFR_MULT  = 6.0; // at vuln=1 => ifr multiplier 1+6=7x
+  const VULN_LONG_MULT = 1.5; // at vuln=1 => long-covid multiplier 1+1.5=2.5x
+
+  // Randomness / uncertainty levels
+  const UNC_PREV_LOGN_SIGMA = 0.35;    // prevalence uncertainty (lognormal)
+  const UNC_CONTACT_LOGN_SIGMA = 0.25; // per-contact risk variability
+  const UNC_ENV_SIGMA = 0.22;          // environment modifier variability
+
+  // Monte Carlo settings
+  const DEFAULT_TRIALS = 6000; // fast enough in most browsers; increase if you want smoother tails
+  const HIST_BINS = 32;
+
+  // ---------------------------
+  // UI wiring
+  // ---------------------------
+  const $ = (id) => document.getElementById(id);
+
+  const sliders = [
+    "prevalence","popSize","shiftHours","contactsPerHour","sectorMult",
+    "proximity","indoorFrac","ventilation","crowding","talking",
+    "maskEff","vaxInf","vaxSev","vuln",
+  ].map(id => $(id));
+
+  const read = () => ({
+    prevalence: +$("prevalence").value / 100, // percent -> fraction
+    popSize: Math.round(+$("popSize").value),
+    shiftHours: +$("shiftHours").value,
+    contactsPerHour: +$("contactsPerHour").value,
+    sectorMult: +$("sectorMult").value,
+
+    proximity: +$("proximity").value,
+    indoorFrac: +$("indoorFrac").value,
+    ventilation: +$("ventilation").value,
+    crowding: +$("crowding").value,
+    talking: +$("talking").value,
+
+    maskEff: +$("maskEff").value,
+    vaxInf: +$("vaxInf").value,
+    vaxSev: +$("vaxSev").value,
+    vuln: +$("vuln").value
+  });
+
+  function fmtPct(x){ return (100*x).toFixed(x<0.01?2:1) + "%"; }
+  function fmtNum(x){
+    if (!isFinite(x)) return "—";
+    if (Math.abs(x) >= 1000) return x.toFixed(0);
+    if (Math.abs(x) >= 100) return x.toFixed(1);
+    if (Math.abs(x) >= 10) return x.toFixed(2);
+    return x.toFixed(3);
+  }
+  function fmtCount(x){
+    if (!isFinite(x)) return "—";
+    if (x >= 100) return x.toFixed(0);
+    if (x >= 10) return x.toFixed(1);
+    return x.toFixed(2);
+  }
+
+  function syncLabels(){
+    const v = read();
+    $("prevalence_v").textContent = (v.prevalence*100).toFixed(2) + "%";
+    $("popSize_v").textContent = v.popSize.toString();
+    $("shiftHours_v").textContent = v.shiftHours.toFixed(1);
+    $("contactsPerHour_v").textContent = v.contactsPerHour.toFixed(1);
+    $("sectorMult_v").textContent = v.sectorMult.toFixed(2);
+
+    $("proximity_v").textContent = v.proximity.toFixed(2);
+    $("indoorFrac_v").textContent = v.indoorFrac.toFixed(2);
+    $("ventilation_v").textContent = v.ventilation.toFixed(2);
+    $("crowding_v").textContent = v.crowding.toFixed(2);
+    $("talking_v").textContent = v.talking.toFixed(2);
+
+    $("maskEff_v").textContent = fmtPct(v.maskEff);
+    $("vaxInf_v").textContent = fmtPct(v.vaxInf);
+    $("vaxSev_v").textContent = fmtPct(v.vaxSev);
+    $("vuln_v").textContent = v.vuln.toFixed(2);
+  }
+
+  // ---------------------------
+  // Math helpers
+  // ---------------------------
+  // Deterministic pseudo-random is unnecessary; use Math.random.
+  function randn() {
+    // Box-Muller
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  }
+  function lognormal(mean, sigma){
+    // mean given as multiplicative mean (approx). We'll interpret mean as median to keep it intuitive.
+    // If X ~ LogNormal(mu, sigma), median = exp(mu). So set mu=ln(mean).
+    const mu = Math.log(Math.max(mean, 1e-12));
+    return Math.exp(mu + sigma * randn());
+  }
+  function clamp(x, a, b){ return Math.min(b, Math.max(a, x)); }
+
+  function quantile(sortedArr, q){
+    const n = sortedArr.length;
+    if (n === 0) return NaN;
+    const pos = (n - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    if (sortedArr[base+1] === undefined) return sortedArr[base];
+    return sortedArr[base] + rest * (sortedArr[base+1] - sortedArr[base]);
+  }
+
+  // ---------------------------
+  // Model: exposure -> infection -> outcomes
+  // ---------------------------
+  function environmentMultiplier(v){
+    // Simple multiplicative structure:
+    // - More indoor, crowding, talking, proximity increase risk
+    // - Better ventilation decreases risk
+    //
+    // Each term ranges roughly 0.5..2-ish then combined with a soft cap to avoid nonsense extremes.
+    const indoor = 0.6 + 1.2 * v.indoorFrac;            // 0.6..1.8
+    const prox   = 0.7 + 1.3 * v.proximity;             // 0.7..2.0
+    const talk   = 0.8 + 1.4 * v.talking;               // 0.8..2.2
+    const crowd  = 0.7 + 1.6 * v.crowding;              // 0.7..2.3
+    const vent   = 1.6 - 1.0 * v.ventilation;           // 0.6..1.6 (better ventilation lowers)
+    let m = indoor * prox * talk * crowd * vent;
+
+    // Add uncertainty around environment (model misspecification)
+    m *= lognormal(1.0, UNC_ENV_SIGMA);
+
+    // Soft cap to prevent runaway:
+    m = clamp(m, 0.15, 12.0);
+    return m;
+  }
+
+  function perContactInfectionProb(v){
+    // Start with base
+    let p = BASE_P_CONTACT;
+
+    // Scale by sector (job nature not captured by other sliders)
+    p *= v.sectorMult;
+
+    // Apply environment
+    p *= environmentMultiplier(v);
+
+    // Prevalence affects probability that a random contact is infectious:
+    // We'll incorporate it at the per-contact level as: p_transmit = prev * p_given_infectious_contact
+    // and treat "p" as p_given_infectious_contact baseline.
+    // We'll draw uncertain prevalence (lognormal around stated prevalence).
+    const prevDraw = clamp(lognormal(v.prevalence, UNC_PREV_LOGN_SIGMA), 0, 0.5); // cap at 50% infectious
+    p *= prevDraw;
+
+    // Mask/respirator reduces transmission. Interpret as combined source+receiver effect, approximate.
+    p *= (1 - v.maskEff);
+
+    // Immune protection reduces infection given exposure.
+    p *= (1 - v.vaxInf);
+
+    // Uncertainty in per-contact risk
+    p *= lognormal(1.0, UNC_CONTACT_LOGN_SIGMA);
+
+    // Bound
+    return clamp(p, 0, 0.9);
+  }
+
+  function shiftInfectionRisk(v){
+    // total contacts in shift
+    const nContacts = Math.max(0, v.contactsPerHour * v.shiftHours);
+
+    // Per-contact infection probability (includes prevalence)
+    const pContact = perContactInfectionProb(v);
+
+    // Assuming independence: P(infection in shift) = 1 - (1 - pContact) ^ nContacts
+    const pShift = 1 - Math.pow(1 - pContact, nContacts);
+    return clamp(pShift, 0, 0.99);
+  }
+
+  function severityProbs(v){
+    // Vulnerability increases severity; immune protection reduces severe outcomes.
+    const hospMult = 1 + VULN_HOSP_MULT * v.vuln;
+    const ifrMult  = 1 + VULN_IFR_MULT  * v.vuln;
+    const longMult = 1 + VULN_LONG_MULT * v.vuln;
+
+    const pSym = clamp(BASE_SYMPTOMATIC * (0.9 + 0.2 * v.vuln), 0.15, 0.9);
+
+    // Vaccine reduces severe outcomes conditional on infection
+    const sevReduce = (1 - v.vaxSev);
+
+    const pHosp = clamp(BASE_HOSP * hospMult * sevReduce, 0, 0.35);
+    const pDeath = clamp(BASE_IFR * ifrMult * sevReduce, 0, 0.25);
+
+    // Long-COVID conditional on symptomatic infection
+    const pLong = clamp(BASE_LONGCOVID * longMult * (0.9 + 0.2 * (1 - v.vaxSev)), 0, 0.45);
+
+    return { pSym, pHosp, pDeath, pLong };
+  }
+
+  // ---------------------------
+  // Monte Carlo simulation
+  // ---------------------------
+  let lastRunToken = 0;
+  let currentMetric = "infections"; // which histogram to display
+  let cached = null;
+
+  function runMonteCarlo(v, trials = DEFAULT_TRIALS){
+    const token = ++lastRunToken;
+    $("simInfo").textContent = "running…";
+    $("trialCount").textContent = trials.toString();
+
+    // Arrays of outcomes across runs (each run produces counts for the chosen workforce size)
+    const infCounts = new Float64Array(trials);
+    const symCounts = new Float64Array(trials);
+    const hospCounts = new Float64Array(trials);
+    const deathCounts = new Float64Array(trials);
+    const longCounts = new Float64Array(trials);
+    const infRisk = new Float64Array(trials); // per-person per-shift infection risk
+
+    const { pSym, pHosp, pDeath, pLong } = severityProbs(v);
+
+    // Chunk the simulation to keep UI responsive
+    const chunk = 500;
+    let i = 0;
+
+    function step(){
+      if (token !== lastRunToken) return; // cancelled
+
+      const end = Math.min(trials, i + chunk);
+      for (; i < end; i++){
+        const pShift = shiftInfectionRisk(v);
+        infRisk[i] = pShift;
+
+        // Simulate workforce infections with Binomial(pop, pShift) approx via Poisson/Normal hybrid.
+        // For speed, use Normal approximation with clamp, decent for mid-large n.
+        const n = v.popSize;
+        const mean = n * pShift;
+        const varr = n * pShift * (1 - pShift);
+        let infected = mean + Math.sqrt(Math.max(1e-9, varr)) * randn();
+        infected = Math.round(clamp(infected, 0, n));
+
+        // Conditional outcomes (binomial approximations)
+        // Symptomatic among infected
+        const meanS = infected * pSym;
+        const varS = infected * pSym * (1 - pSym);
+        let sym = meanS + Math.sqrt(Math.max(1e-9, varS)) * randn();
+        sym = Math.round(clamp(sym, 0, infected));
+
+        // Hospitalizations among infected
+        const meanH = infected * pHosp;
+        const varH = infected * pHosp * (1 - pHosp);
+        let hosp = meanH + Math.sqrt(Math.max(1e-9, varH)) * randn();
+        hosp = Math.round(clamp(hosp, 0, infected));
+
+        // Deaths among infected (independent draw; in reality correlated w/ hospitalization)
+        const meanD = infected * pDeath;
+        const varD = infected * pDeath * (1 - pDeath);
+        let death = meanD + Math.sqrt(Math.max(1e-9, varD)) * randn();
+        death = Math.round(clamp(death, 0, infected));
+
+        // Long-COVID among symptomatic
+        const meanL = sym * pLong;
+        const varL = sym * pLong * (1 - pLong);
+        let longc = meanL + Math.sqrt(Math.max(1e-9, varL)) * randn();
+        longc = Math.round(clamp(longc, 0, sym));
+
+        infCounts[i] = infected;
+        symCounts[i] = sym;
+        hospCounts[i] = hosp;
+        deathCounts[i] = death;
+        longCounts[i] = longc;
+      }
+
+      if (i < trials){
+        requestAnimationFrame(step);
+      } else {
+        // finalize
+        cached = { v, trials, infCounts, symCounts, hospCounts, deathCounts, longCounts, infRisk };
+        $("simInfo").textContent = "done";
+        updateKPIs();
+        drawHistogram();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function stats(arr){
+    // Convert to normal Array for sorting (Float64Array -> Array is fine at this scale)
+    const a = Array.from(arr);
+    a.sort((x,y)=>x-y);
+    const mean = a.reduce((s,x)=>s+x,0)/a.length;
+    return {
+      mean,
+      p05: quantile(a, 0.05),
+      p50: quantile(a, 0.50),
+      p95: quantile(a, 0.95),
+      min: a[0],
+      max: a[a.length-1]
+    };
+  }
+
+  function updateKPIs(){
+    if (!cached) return;
+    const pop = cached.v.popSize;
+
+    const sRisk = stats(cached.infRisk);
+    $("k_infrisk").textContent = fmtPct(sRisk.p50);
+    $("k_infrisk_ci").textContent = `5–95%: ${fmtPct(sRisk.p05)} – ${fmtPct(sRisk.p95)}`;
+
+    const riskBar = $("riskBar");
+    riskBar.style.width = clamp(sRisk.p50*100, 0, 100).toFixed(1) + "%";
+
+    const sInf = stats(cached.infCounts);
+    $("k_infcount").textContent = fmtCount(sInf.mean);
+    $("k_infcount_ci").textContent = `5–95%: ${fmtCount(sInf.p05)} – ${fmtCount(sInf.p95)} (of ${pop})`;
+
+    const sHosp = stats(cached.hospCounts);
+    $("k_hosp").textContent = fmtCount(sHosp.mean);
+    $("k_hosp_ci").textContent = `5–95%: ${fmtCount(sHosp.p05)} – ${fmtCount(sHosp.p95)}`;
+
+    const sDeath = stats(cached.deathCounts);
+    $("k_death").textContent = fmtCount(sDeath.mean);
+    $("k_death_ci").textContent = `5–95%: ${fmtCount(sDeath.p05)} – ${fmtCount(sDeath.p95)}`;
+  }
+
+  // ---------------------------
+  // Histogram drawing (Canvas)
+  // ---------------------------
+  const canvas = $("hist");
+  const ctx = canvas.getContext("2d");
+
+  function resizeCanvas(){
+    const r = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * r);
+    canvas.height = Math.floor(rect.height * r);
+    ctx.setTransform(r,0,0,r,0,0);
+  }
+  window.addEventListener("resize", () => {
+    resizeCanvas();
+    drawHistogram();
+  });
+
+  function getMetricArray(){
+    if (!cached) return null;
+    switch(currentMetric){
+      case "infections": return cached.infCounts;
+      case "symptomatic": return cached.symCounts;
+      case "hosp": return cached.hospCounts;
+      case "deaths": return cached.deathCounts;
+      case "long": return cached.longCounts;
+      default: return cached.infCounts;
+    }
+  }
+
+  function drawHistogram(){
+    resizeCanvas();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if (!cached){
+      ctx.fillStyle = "rgba(232,238,252,.85)";
+      ctx.font = "14px system-ui";
+      ctx.fillText("Run the simulation by moving a slider…", 18, 28);
+      return;
+    }
+
+    const arr = Array.from(getMetricArray());
+    const st = stats(arr);
+    const titleMap = {
+      infections: "Workforce infections per shift",
+      symptomatic: "Symptomatic cases per shift",
+      hosp: "Hospitalizations per shift",
+      deaths: "Deaths per shift",
+      long: "Long-COVID cases per shift"
+    };
+    $("chartNote").textContent =
+      `${titleMap[currentMetric]} — mean ${fmtCount(st.mean)}, median ${fmtCount(st.p50)}, 5–95% ${fmtCount(st.p05)}–${fmtCount(st.p95)}.`;
+
+    // Define range; keep some padding
+    const min = Math.floor(st.min);
+    const max = Math.ceil(st.max);
+    const range = Math.max(1, max - min);
+    const bins = HIST_BINS;
+
+    const counts = new Array(bins).fill(0);
+    for (const x of arr){
+      const t = (x - min) / range;
+      const b = clamp(Math.floor(t * bins), 0, bins - 1);
+      counts[b] += 1;
+    }
+
+    const W = canvas.getBoundingClientRect().width;
+    const H = canvas.getBoundingClientRect().height;
+
+    // Plot area
+    const padL = 46, padR = 14, padT = 18, padB = 34;
+    const pw = W - padL - padR;
+    const ph = H - padT - padB;
+
+    // Axes
+    ctx.strokeStyle = "rgba(255,255,255,.14)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, padT + ph);
+    ctx.lineTo(padL + pw, padT + ph);
+    ctx.stroke();
+
+    // Bars
+    const maxCount = Math.max(...counts);
+    ctx.fillStyle = "rgba(122,162,255,.55)";
+    const barW = pw / bins;
+    for (let i=0;i<bins;i++){
+      const h = (counts[i] / maxCount) * ph;
+      const x = padL + i * barW;
+      const y = padT + ph - h;
+      ctx.fillRect(x+1, y, Math.max(1, barW-2), h);
+    }
+
+    // Labels
+    ctx.fillStyle = "rgba(232,238,252,.85)";
+    ctx.font = "12px system-ui";
+
+    const xMinLabel = min.toString();
+    const xMaxLabel = max.toString();
+    ctx.fillText(xMinLabel, padL, padT + ph + 22);
+    ctx.fillText(xMaxLabel, padL + pw - ctx.measureText(xMaxLabel).width, padT + ph + 22);
+
+    // Y label (as percent of trials, optional)
+    ctx.save();
+    ctx.translate(14, padT + ph/2);
+    ctx.rotate(-Math.PI/2);
+    ctx.fillStyle = "rgba(167,179,214,.9)";
+    ctx.fillText("Relative frequency", 0, 0);
+    ctx.restore();
+
+    // Title
+    ctx.fillStyle = "rgba(232,238,252,.92)";
+    ctx.font = "13px system-ui";
+    ctx.fillText(titleMap[currentMetric], padL, 14);
+
+    // Marker lines for median and 5/95
+    const drawMarker = (value, alpha, label) => {
+      const t = (value - min) / range;
+      const x = padL + clamp(t,0,1) * pw;
+      ctx.strokeStyle = `rgba(251,191,36,${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + ph);
+      ctx.stroke();
+
+      ctx.fillStyle = `rgba(251,191,36,${Math.min(1, alpha+0.2)})`;
+      ctx.font = "12px system-ui";
+      const txt = `${label}: ${fmtCount(value)}`;
+      const tw = ctx.measureText(txt).width;
+      const tx = clamp(x - tw/2, padL, padL + pw - tw);
+      ctx.fillText(txt, tx, padT + ph + 22);
+    };
+    drawMarker(st.p05, 0.35, "p05");
+    drawMarker(st.p50, 0.75, "median");
+    drawMarker(st.p95, 0.35, "p95");
+  }
+
+  // ---------------------------
+  // Debounced real-time rerun
+  // ---------------------------
+  let rerunTimer = null;
+  function scheduleRun(){
+    syncLabels();
+    $("simInfo").textContent = "queued";
+    if (rerunTimer) clearTimeout(rerunTimer);
+    rerunTimer = setTimeout(() => runMonteCarlo(read()), 120);
+  }
+
+  sliders.forEach(s => s.addEventListener("input", scheduleRun));
+
+  // Histogram selectors
+  $("showInfections").onclick = () => { currentMetric = "infections"; drawHistogram(); };
+  $("showSymptomatic").onclick = () => { currentMetric = "symptomatic"; drawHistogram(); };
+  $("showHosp").onclick = () => { currentMetric = "hosp"; drawHistogram(); };
+  $("showDeaths").onclick = () => { currentMetric = "deaths"; drawHistogram(); };
+  $("showLong").onclick = () => { currentMetric = "long"; drawHistogram(); };
+
+  // Presets
+  const setVals = (obj) => {
+    for (const [k,val] of Object.entries(obj)){
+      const el = $(k);
+      if (el) el.value = val;
+    }
+    scheduleRun();
+  };
+
+  $("btnPresetOffice").onclick = () => setVals({
+    prevalence: 0.6,
+    popSize: 800,
+    shiftHours: 8,
+    contactsPerHour: 1.5,
+    sectorMult: 0.75,
+    proximity: 0.25,
+    indoorFrac: 0.85,
+    ventilation: 0.65,
+    crowding: 0.20,
+    talking: 0.35,
+    maskEff: 0.25,
+    vaxInf: 0.30,
+    vaxSev: 0.60,
+    vuln: 0.25,
+  });
+
+  $("btnPresetRetail").onclick = () => setVals({
+    prevalence: 1.0,
+    popSize: 500,
+    shiftHours: 8,
+    contactsPerHour: 8,
+    sectorMult: 1.25,
+    proximity: 0.55,
+    indoorFrac: 0.90,
+    ventilation: 0.40,
+    crowding: 0.55,
+    talking: 0.60,
+    maskEff: 0.20,
+    vaxInf: 0.25,
+    vaxSev: 0.55,
+    vuln: 0.35,
+  });
+
+  $("btnPresetHealthcare").onclick = () => setVals({
+    prevalence: 1.2,
+    popSize: 600,
+    shiftHours: 10,
+    contactsPerHour: 10,
+    sectorMult: 1.75,
+    proximity: 0.75,
+    indoorFrac: 0.95,
+    ventilation: 0.55,
+    crowding: 0.55,
+    talking: 0.45,
+    maskEff: 0.55,
+    vaxInf: 0.30,
+    vaxSev: 0.70,
+    vuln: 0.35,
+  });
+
+  $("btnReset").onclick = () => setVals({
+    prevalence: 1.0,
+    popSize: 500,
+    shiftHours: 8,
+    contactsPerHour: 4,
+    sectorMult: 1.15,
+    proximity: 0.55,
+    indoorFrac: 0.85,
+    ventilation: 0.45,
+    crowding: 0.50,
+    talking: 0.55,
+    maskEff: 0.35,
+    vaxInf: 0.25,
+    vaxSev: 0.55,
+    vuln: 0.35,
+  });
+
+  // Initialize
+  syncLabels();
+  resizeCanvas();
+  drawHistogram();
+  runMonteCarlo(read());
+})();
+</script>
+</body>
+</html>
